@@ -120,6 +120,9 @@
             color: #666;
         }
 
+        .text-success { color: green; }
+        .text-danger { color: red; }
+
         @media (max-width: 600px) {
             .container {
                 width: 100%;
@@ -165,8 +168,9 @@
             <thead>
                 <tr>
                     <th class="sortable" data-column="symbol">Symbol</th>
-                    <th class="sortable" data-column="percentage">Total Percentage Change (%)</th>
-                    <th>Daily Changes (%)</th>
+                    <th class="sortable" data-column="percentage">Total (%) Change</th>
+                    <th class="sortable" data-column="day1">Day 1 (%) Change</th>
+                    <th class="sortable" data-column="day2">Day 2 (%) Change</th>
                 </tr>
             </thead>
             <tbody>
@@ -185,14 +189,23 @@
                         {% endif %}
                     </td>  
                     <td class="daily-changes">
-                        {% if result.daily_changes %}
-                            {% for change in result.daily_changes %}
-                                <div class="{% if change > 0 %}text-success{% else %}text-danger{% endif %}">
-                                    Day {{ loop.index }}: {{ change }}%
-                                </div>
-                            {% endfor %}
+                        {% if result.day_1_percent_change != 'N/A' and result.day_1_percent_change != 'Error' %}
+                            {% set day1_change = result.day_1_percent_change | float %}
+                            <div class="{% if day1_change > 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ day1_change }}%
+                            </div>
                         {% else %}
-                            No daily changes
+                            {{ result.day_1_percent_change }}
+                        {% endif %}
+                    </td>
+                    <td class="daily-changes">
+                        {% if result.day_2_percent_change != 'N/A' and result.day_2_percent_change != 'Error' %}
+                            {% set day2_change = result.day_2_percent_change | float %}
+                            <div class="{% if day2_change > 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ day2_change }}%
+                            </div>
+                        {% else %}
+                            {{ result.day_2_percent_change }}
                         {% endif %}
                     </td>
                 </tr>
@@ -226,18 +239,32 @@
                 const isDescending = th.classList.contains('desc');
 
                 rows.sort((rowA, rowB) => {
-                    const cellA = rowA.querySelector(`td:nth-child(${th.cellIndex + 1})`).textContent.trim();
-                    const cellB = rowB.querySelector(`td:nth-child(${th.cellIndex + 1})`).textContent.trim();
-
-                    if (column === 'percentage') {
-                        return isDescending
-                            ? parseFloat(cellB) - parseFloat(cellA)
-                            : parseFloat(cellA) - parseFloat(cellB);
-                    } else {
-                        return isDescending
-                            ? cellB.localeCompare(cellA)
-                            : cellA.localeCompare(cellB);
+                    // Adjust column index based on the column type
+                    let colIndex = 1;
+                    switch(column) {
+                        case 'symbol': colIndex = 1; break;
+                        case 'percentage': colIndex = 2; break;
+                        case 'day1': colIndex = 3; break;
+                        case 'day2': colIndex = 4; break;
                     }
+
+                    const cellA = rowA.querySelector(`td:nth-child(${colIndex})`).textContent.trim();
+                    const cellB = rowB.querySelector(`td:nth-child(${colIndex})`).textContent.trim();
+
+                    // Handle non-numeric values
+                    if (['N/A', 'Error'].includes(cellA) || ['N/A', 'Error'].includes(cellB)) {
+                        return isDescending ? -1 : 1;
+                    }
+
+                    // Convert to number for numeric columns
+                    if (['percentage', 'day1', 'day2'].includes(column)) {
+                        const numA = parseFloat(cellA);
+                        const numB = parseFloat(cellB);
+                        return isDescending ? numB - numA : numA - numB;
+                    }
+
+                    // Default string comparison for symbol
+                    return isDescending ? cellB.localeCompare(cellA) : cellA.localeCompare(cellB);
                 });
 
                 // Update table with sorted rows

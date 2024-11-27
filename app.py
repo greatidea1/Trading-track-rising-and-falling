@@ -4,6 +4,11 @@ from tvDatafeed import TvDatafeed, Interval
 import pandas as pd
 from time import sleep
 import os
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, 
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'  # Directory to store uploaded files
@@ -48,30 +53,37 @@ def index():
             # Fetch historical data
             results = []
             for symbol in coin_symbols:
-                sleep(0.5)  # in seconds
+                sleep(0.5)  # Delay between requests
                 try:
-                    # Fetch enough bars to cover the entire date range
+                    logging.info(f"Fetching data for symbol: {symbol}")
+                    
+                    # Fetch more historical data to ensure coverage
                     df = tv.get_hist(
                         symbol=symbol,
-                        exchange="BINANCE",  # Default exchange
+                        exchange="BINANCE",  
                         interval=Interval.in_daily,
-                        n_bars=10  # Increased to ensure we have enough data
+                        n_bars=50  # Increased to ensure more data
                     )
-
+                    
                     # Ensure the index is a datetime object
                     df.index = pd.to_datetime(df.index)
+                    
+                    # Detailed logging of data range
+                    logging.info(f"Full data range for {symbol}: {df.index.min()} to {df.index.max()}")
+                    logging.info(f"Filtering from {from_date_dt} to {to_date_dt}")
 
-                    # Filter data based on date range
-                    df_filtered = df[(df.index >= from_date_dt) & (df.index <= to_date_dt)]
+                    # More flexible date filtering
+                    df_filtered = df[
+                        (df.index.date >= from_date_dt.date()) & 
+                        (df.index.date <= to_date_dt.date())
+                    ]
+                    
+                    logging.info(f"Filtered data length for {symbol}: {len(df_filtered)}")
 
-                    if not df_filtered.empty and len(df_filtered) >= 2:
+                    if not df_filtered.empty and len(df_filtered) >= 3:
                         # Calculate daily percentage changes
-                        daily_changes = []
-                        for i in range(1, len(df_filtered)):
-                            prev_close = df_filtered['close'].iloc[i-1]
-                            curr_close = df_filtered['close'].iloc[i]
-                            daily_change = ((curr_close - prev_close) / prev_close) * 100
-                            daily_changes.append(round(daily_change, 2))
+                        day1_change = round(((df_filtered['close'].iloc[1] - df_filtered['close'].iloc[0]) / df_filtered['close'].iloc[0]) * 100, 2)
+                        day2_change = round(((df_filtered['close'].iloc[2] - df_filtered['close'].iloc[1]) / df_filtered['close'].iloc[1]) * 100, 2)
 
                         # Calculate total percentage change
                         open_price = df_filtered['open'].iloc[0]
@@ -83,25 +95,35 @@ def index():
                             'symbol': symbol,
                             'exchange': "BINANCE",
                             'total_percentage_change': round(total_percentage_change, 2),
-                            'daily_changes': daily_changes
+                            'day_1_percent_change': day1_change,
+                            'day_2_percent_change': day2_change
                         }
                         results.append(result)
+                        
+                        # Log successful data retrieval
+                        logging.info(f"Successfully processed {symbol}: {result}")
                     else:
+                        logging.warning(f"No data within range for {symbol}")
                         results.append({
                             'symbol': symbol,
                             'exchange': "BINANCE",
                             'total_percentage_change': 'No data within range',
-                            'daily_changes': []
+                            'day_1_percent_change': 'N/A',
+                            'day_2_percent_change': 'N/A'
                         })
+                
                 except Exception as e:
+                    logging.error(f"Error processing {symbol}: {e}")
                     results.append({
                         'symbol': symbol,
                         'exchange': "BINANCE",
                         'total_percentage_change': f"Error: {str(e)}",
-                        'daily_changes': []
+                        'day_1_percent_change': 'Error',
+                        'day_2_percent_change': 'Error'
                     })
 
         except Exception as e:
+            logging.error(f"Main processing error: {e}")
             error = str(e)
 
     return render_template('index.html', results=results, error=error, date_message=date_message)
