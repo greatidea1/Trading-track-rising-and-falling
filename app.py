@@ -53,7 +53,7 @@ def index():
             # Fetch historical data
             results = []
             for symbol in coin_symbols:
-                sleep(0.5)  # Delay between requests
+                sleep(0.8)  # Delay between requests
                 try:
                     logging.info(f"Fetching data for symbol: {symbol}")
                     
@@ -62,7 +62,7 @@ def index():
                         symbol=symbol,
                         exchange="BINANCE",  
                         interval=Interval.in_daily,
-                        n_bars=50  # Increased to ensure more data
+                        n_bars=10  # Increased to ensure more data
                     )
                     
                     # Ensure the index is a datetime object
