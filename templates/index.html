@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TradingView Coin Data</title>
+    <style>
+        body {
+            font-family: Tahoma, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 1200px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+
+        form {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+        }
+
+        input, button {
+            width: 100%;
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        button {
+            background: #007bff;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+
+        th {
+            background: #f4f4f9;
+            cursor: pointer;
+        }
+
+        th.sortable {
+            position: relative;
+        }
+
+        th.sortable:after {
+            content: '\25B2'; /* Default arrow */
+            position: absolute;
+            right: 10px;
+        }
+
+        th.sortable.desc:after {
+            content: '\25BC'; /* Arrow pointing down */
+        }
+
+        .percentage-cell {
+            word-wrap: break-word;
+            position: relative;
+        }
+
+        .percentage-bar {
+            height: 10px;
+            border-radius: 5px;
+            background: #ccc;
+            overflow: hidden;
+        }
+
+        .percentage-bar-positive {
+            background: green;
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+
+        .percentage-bar-negative {
+            background: red;
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+
+        .daily-changes {
+            font-size: 0.8em;
+            color: #666;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                width: 100%;
+                padding: 10px;
+            }
+
+            table {
+                font-size: 14px;
+            }
+
+            .percentage-cell {
+                width: 150px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Fetch Coin Data</h1>
+        <form method="POST" enctype="multipart/form-data">
+            <label for="from_date">From Date (YYYY-MM-DD):</label>
+            <input type="date" id="from_date" name="from_date" required>
+
+            <label for="to_date">To Date (optional):</label>
+            <input type="date" id="to_date" name="to_date" readonly>
+
+            <label for="file">Upload CSV File (Symbols Only):</label>
+            <input type="file" id="file" name="file" accept=".csv" required>
+
+            <button type="submit">Fetch</button>
+        </form>
+
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+
+        {% if date_message %}
+            <p><strong>{{ date_message }}</strong></p>
+        {% endif %}
+
+        {% if results %}
+        <table>
+            <thead>
+                <tr>
+                    <th class="sortable" data-column="symbol">Symbol</th>
+                    <th class="sortable" data-column="percentage">Total Percentage Change (%)</th>
+                    <th>Daily Changes (%)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for result in results %}
+                <tr>
+                    <td>{{ result.symbol }}</td>
+                    <td class="percentage-cell">
+                        {% if result.total_percentage_change != 'No data within range' and result.total_percentage_change != 'Error' %}
+                            {% set percentage = result.total_percentage_change | float %}
+                            <div class="percentage-bar">
+                                <div class="{% if percentage > 0 %}percentage-bar-positive{% else %}percentage-bar-negative{% endif %}" style="width: {{ percentage|abs }}%;"></div>
+                            </div>
+                            {{ percentage }}%
+                        {% else %}
+                            {{ result.total_percentage_change }}
+                        {% endif %}
+                    </td>  
+                    <td class="daily-changes">
+                        {% if result.daily_changes %}
+                            {% for change in result.daily_changes %}
+                                <div class="{% if change > 0 %}text-success{% else %}text-danger{% endif %}">
+                                    Day {{ loop.index }}: {{ change }}%
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            No daily changes
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    </div>
+
+    <script>
+        // Automatically update "To Date" to 2 days after "From Date"
+        const fromDateInput = document.getElementById('from_date');
+        const toDateInput = document.getElementById('to_date');
+
+        fromDateInput.addEventListener('change', () => {
+            const fromDate = new Date(fromDateInput.value);
+            if (!isNaN(fromDate.getTime())) {
+                const toDate = new Date(fromDate);
+                toDate.setDate(toDate.getDate() + 2);
+                toDateInput.value = toDate.toISOString().split('T')[0];
+            }
+        });
+
+        // Enable sorting for table columns
+        document.querySelectorAll('.sortable').forEach((th) => {
+            th.addEventListener('click', () => {
+                const table = th.closest('table');
+                const tbody = table.querySelector('tbody');
+                const rows = Array.from(tbody.querySelectorAll('tr'));
+                const column = th.dataset.column;
+                const isDescending = th.classList.contains('desc');
+
+                rows.sort((rowA, rowB) => {
+                    const cellA = rowA.querySelector(`td:nth-child(${th.cellIndex + 1})`).textContent.trim();
+                    const cellB = rowB.querySelector(`td:nth-child(${th.cellIndex + 1})`).textContent.trim();
+
+                    if (column === 'percentage') {
+                        return isDescending
+                            ? parseFloat(cellB) - parseFloat(cellA)
+                            : parseFloat(cellA) - parseFloat(cellB);
+                    } else {
+                        return isDescending
+                            ? cellB.localeCompare(cellA)
+                            : cellA.localeCompare(cellB);
+                    }
+                });
+
+                // Update table with sorted rows
+                rows.forEach((row) => tbody.appendChild(row));
+
+                // Toggle sort direction
+                document.querySelectorAll('.sortable').forEach((header) => header.classList.remove('desc'));
+                if (!isDescending) th.classList.add('desc');
+            });
+        });
+    </script>
+</body>
+</html>
